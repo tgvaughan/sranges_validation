@@ -3,7 +3,6 @@ package srvalidate;
 import beast.core.Input;
 import beast.core.parameter.RealParameter;
 import beast.evolution.tree.Node;
-import beast.evolution.tree.Tree;
 import beast.evolution.tree.TreeDistribution;
 import beast.evolution.tree.TreeInterface;
 
@@ -88,15 +87,15 @@ public class SRTreeDensity extends TreeDistribution {
     }
 
     protected int enclosingStratigraphicRange(Node node) {
-        Node ld = getLeftDescendentLeaf(node);
+        Node ld = getLeftDescendantLeaf(node);
         if (node.getHeight() < (ld.getHeight() + sRanges.getArrayValue(ld.getNr())))
             return ld.getNr();
         else
             return -1;
     }
 
-    protected Node getLeftDescendentLeaf(Node node) {
-        return node.isLeaf() ? node : getLeftDescendentLeaf(node.getLeft());
+    protected Node getLeftDescendantLeaf(Node node) {
+        return node.isLeaf() ? node : getLeftDescendantLeaf(node.getLeft());
     }
 
     @Override
@@ -107,15 +106,6 @@ public class SRTreeDensity extends TreeDistribution {
         double c2 = -(lambda.getValue()-mu.getValue()-2*lambda.getValue()*rho.getValue()-psi.getValue())/c1;
 
         int n = tree.getLeafNodeCount();
-
-        // Number of present-day samples:
-        int l = 0;
-        for (Node node : tree.getExternalNodes())
-            if (node.getHeight()<EPSILON)
-                l += 1;
-
-        // Number of "fossils":
-        int k = n - l;
 
         for (Node node : tree.getNodesAsArray()) {
             if (node.isFake())
@@ -157,8 +147,20 @@ public class SRTreeDensity extends TreeDistribution {
                 else {
                     logP += Math.log(psi.getValue());
 
-                    if (!node.isDirectAncestor())
+                    if (!node.isDirectAncestor()) {
                         logP += log_p(node.getHeight(), c1, c2);
+
+                    } else {
+                        // Check for descendant SR
+
+                        Node leftDescendant = getLeftDescendantLeaf(node.getParent());
+                        if (leftDescendant.getHeight() + sRanges.getValue(leftDescendant.getNr())< node.getHeight()) {
+                            // We are ancestral to a distinct species: take the unobserved speciation event into account
+
+                            logP += Math.log(psi.getValue())
+                                    + log_p(unobsSpecTimes.getArrayValue(leftDescendant.getNr()), c1, c2);
+                        }
+                    }
                 }
             } else {
                 logP += Math.log(lambda.getValue());
