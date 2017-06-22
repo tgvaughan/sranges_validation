@@ -86,6 +86,10 @@ public class SRTreeDensity extends TreeDistribution {
         return log_qtilde_asym(startTime, c1, c2) - log_qtilde_asym(endTime, c1, c2);
     }
 
+    protected double log_oneMinusP0Hat(double t, double c1, double c2) {
+        return Math.log(rho.getValue()*(lambda.getValue()-mu.getValue())/(lambda.getValue()*rho.getValue() + (lambda.getValue()*(1-rho.getValue()) - mu.getValue())* Math.exp((mu.getValue()-lambda.getValue()) * t))) ;
+    }
+
     protected int enclosingStratigraphicRange(Node node) {
         Node ld = getLeftDescendantLeaf(node);
         if (node.getHeight() < (ld.getHeight() + sRanges.getArrayValue(ld.getNr())))
@@ -157,7 +161,7 @@ public class SRTreeDensity extends TreeDistribution {
                         if (leftDescendant.getHeight() + sRanges.getValue(leftDescendant.getNr())< node.getHeight()) {
                             // We are ancestral to a distinct species: take the unobserved speciation event into account
 
-                            logP += Math.log(psi.getValue())
+                            logP += Math.log(lambda.getValue())
                                     + log_p(unobsSpecTimes.getArrayValue(leftDescendant.getNr()), c1, c2);
                         }
                     }
@@ -167,7 +171,7 @@ public class SRTreeDensity extends TreeDistribution {
             }
         }
 
-        logP -= Math.log(1.0 - log_p(x0.getArrayValue(), c1, c2));
+        logP -= log_oneMinusP0Hat(x0.getValue(),c1,c2);
 
         return logP;
     }
