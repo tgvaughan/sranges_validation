@@ -1,10 +1,15 @@
 package srvalidate;
 
 import beast.core.Input;
+import beast.core.State;
+import beast.core.StateNode;
 import beast.core.parameter.RealParameter;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TreeDistribution;
 import beast.evolution.tree.TreeInterface;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Draft implementation of SR tree density described by eq 8 in Stadler et al. (2017).
@@ -111,38 +116,54 @@ public class SRTreeDensity extends TreeDistribution {
 
         int n = tree.getLeafNodeCount();
 
+     //   System.out.println("logP="+logP + " c1=" + c1 + " c2=" + c2);
+
         for (Node node : tree.getNodesAsArray()) {
             if (node.isFake())
                 continue;
 
+        //    System.out.println("node " + node.getNr());
             int enclosingRange = enclosingStratigraphicRange(node);
 
             double startTime, endTime;
-            if (enclosingRange>0) {
+            if (enclosingRange>=0) {
 
                 double rangeEndTime = sRanges.getArrayValue(enclosingRange) + tree.getNode(enclosingRange).getHeight();
 
                 // Stratigraphic range branch
-                startTime = node.getHeight();
-                endTime = node.isRoot() ? rangeEndTime : Math.min(rangeEndTime, node.getParent().getHeight());
+                endTime = node.getHeight();
+                startTime = node.isRoot() ? rangeEndTime : Math.min(rangeEndTime, node.getParent().getHeight());
+
 
                 logP += log_qhat_asym_s(startTime, endTime, c1, c2);
+                System.out.println("  stratigraphic range branch("+startTime + ", " + endTime + ")");
+                System.out.println("  logP="+logP);
+
+                // sampling contribution for oldest fossil in this stratigraphic range
+                logP += Math.log(psi.getValue());
 
                 // Non-stratigraphic range  branch
 
-                startTime = endTime;
-                endTime = node.isRoot() ? x0.getValue() : node.getParent().getHeight();
+                endTime = startTime;
+                startTime = node.isRoot() ? x0.getValue() : node.getParent().getHeight();
 
                 logP += log_qhat_asym_ns(startTime, endTime, c1, c2);
+                System.out.println("  non-stratigraphic range branch("+startTime + ", " + endTime + ")");
+                System.out.println("  logP="+logP);
+
 
             } else {
 
+
                 // Non-stratigraphic  branch
 
-                startTime = node.getHeight();
-                endTime = node.isRoot() ? x0.getValue() : node.getParent().getHeight();
+                endTime = node.getHeight();
+                startTime = node.isRoot() ? x0.getValue() : node.getParent().getHeight();
 
                 logP += log_qhat_asym_ns(startTime, endTime, c1, c2);
+              //  System.out.println("  non-stratigraphic range branch("+startTime + ", " + endTime + ")");
+              //  System.out.println("  logP="+logP);
+
             }
 
             if (node.isLeaf()) {
@@ -152,9 +173,14 @@ public class SRTreeDensity extends TreeDistribution {
                     logP += Math.log(psi.getValue());
 
                     if (!node.isDirectAncestor()) {
+
                         logP += log_p(node.getHeight(), c1, c2);
+                    //    System.out.println("  prob of survival to leaf " + node.getNr());
+                    //    System.out.println("  logP="+logP);
 
                     } else {
+                        //System.out.println("SHOULDN'T GET HERE in simple example :)");
+
                         // Check for descendant SR
 
                         Node leftDescendant = getLeftDescendantLeaf(node.getParent());
@@ -175,4 +201,81 @@ public class SRTreeDensity extends TreeDistribution {
 
         return logP;
     }
+
+       public void probSpecialCase(double y1, double y2, double o1, double o2, double x1, double x0) {
+
+            int k = 3;
+
+            double c1;
+            double c2;
+          //  double logPBis;
+
+            double lambdaBis = lambda.getValue();
+            double rhoBis = rho.getValue();
+            double muBis = mu.getValue();
+
+
+            System.out.println("psi\tlogP");
+            for (double psiBis = 0.1; psiBis < 8.01; psiBis += 0.05) {
+
+                psi.setValue(psiBis);
+
+                c1 = Math.abs(Math.sqrt(Math.pow(lambdaBis - muBis - psiBis, 2) + 4 * lambdaBis * psiBis));
+                c2 = -(lambdaBis - muBis - 2 * lambdaBis * rhoBis - psiBis) / c1;
+
+                // 3 sampling events
+                double logP = k * Math.log(psiBis);
+
+                // 1 extant species
+                logP += Math.log(rhoBis);
+
+                // 1 speciation event
+                logP += Math.log(lambdaBis);
+
+                // probability of survival to present from time 3
+                logP -= log_oneMinusP0Hat(3, c1, c2);
+
+                logP += log_p(y2, c1, c2);
+
+                logP += log_qtilde_asym(1, c1, c2) - log_qtilde_asym(0, c1, c2);
+
+
+                logP += log_qtilde_asym(1.5, c1, c2) - log_qtilde_asym(0.5, c1, c2);
+
+                logP += log_q(2,c1,c2)  + log_q(3,c1,c2) - log_q(1,c1,c2) - log_q(1.5,c1,c2);
+                System.out.println(psiBis + "\t" + logP);
+            }
+        }
+
+        public static void main(String[] args) {
+            double y1 = 0;
+            double y2 = 0.5;
+            double o1 = 1;
+            double o2 = 1.5;
+            double x1 = 2;
+            double x0 = 3;
+
+            double lambdaBis = 1.0;
+            double rhoBis = 0.1;
+            double muBis = 0.1;
+            double psiBis = 0.1;
+
+            RealParameter psiParameter = new RealParameter(new Double[] {psiBis});
+
+            List<StateNode> stateNodeList = new ArrayList<StateNode>();
+            stateNodeList.add(psiParameter);
+
+            State state = new State();
+            state.stateNodeInput.setValue(stateNodeList, state);
+            state.initialise();
+
+            SRTreeDensity density = new SRTreeDensity();
+            density.lambdaInput.setValue(new RealParameter(new Double[] {lambdaBis}), density);
+            density.rhoInput.setValue(new RealParameter(new Double[] {rhoBis}), density);
+            density.muInput.setValue(new RealParameter(new Double[] {muBis}), density);
+            density.psiInput.setValue(psiParameter, density);
+            density.initAndValidate();
+
+            density.probSpecialCase(y1, y2, o1, o2, x1, x0);
+        }
 }
