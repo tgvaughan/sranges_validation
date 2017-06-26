@@ -54,23 +54,22 @@ public class SRTreeSimulator {
 
             if (U < totalBirthRate/totalPropensity) {
                 // do birth
-
                 doBirth(activeLineages, T, x0, taxa);
+
             } else {
                 U -= totalBirthRate/totalPropensity;
                 if (U < totalDeathRate/totalPropensity) {
                     // do death
-
                     doDeath(activeLineages, T, x0, srangeMap);
 
                 } else {
                     // do sample
                     Node sampledNode = activeLineages.get(Randomizer.nextInt(activeLineages.size()));
                     doSample(sampledNode, T, x0, srangeMap);
-
                 }
             }
         }
+
         for (Node activeLineage : activeLineages) {
             if (Randomizer.nextDouble() < rho) {
                 doSample(activeLineage, x0, x0, srangeMap);
@@ -78,6 +77,13 @@ public class SRTreeSimulator {
         }
 
         // TODO traverse the whole tree, removing subtrees that have no stratigraphic intervals in them
+        for (Node node : start.getAllChildNodes()) {
+            for (Node childNode : node.getAllChildNodes()) {
+                if (srangeMap.get(childNode) == null) {
+                    node.removeChild(childNode);
+                }
+            }
+        }
 
         processMetaData(start);
 
@@ -101,10 +107,11 @@ public class SRTreeSimulator {
         parent.setHeight(x0 - time);
 
         Node leftChild = createNode(taxa);
-
         Node rightChild = createNode(taxa);
+
         leftChild.setHeight(x0 - time);
         rightChild.setHeight(x0 - time);
+
         parent.addChild(leftChild);
         parent.addChild(rightChild);
 
@@ -125,7 +132,6 @@ public class SRTreeSimulator {
     }
 
     private void doSample(Node nodeToSample, double time, double x0, Map<Node,RealParameter> srangeMap) {
-
 
         RealParameter srange = srangeMap.get(nodeToSample);
         if (srange == null) {
