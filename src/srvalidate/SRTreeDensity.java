@@ -136,8 +136,8 @@ public class SRTreeDensity extends TreeDistribution {
 
 
                 logP += log_qhat_asym_s(startTime, endTime, c1, c2);
-                System.out.println("  stratigraphic range branch("+startTime + ", " + endTime + ")");
-                System.out.println("  logP="+logP);
+                //System.out.println("  stratigraphic range branch("+startTime + ", " + endTime + ")");
+                //System.out.println("  logP="+logP);
 
                 // sampling contribution for oldest fossil in this stratigraphic range
                 logP += Math.log(psi.getValue());
@@ -148,8 +148,8 @@ public class SRTreeDensity extends TreeDistribution {
                 startTime = node.isRoot() ? x0.getValue() : node.getParent().getHeight();
 
                 logP += log_qhat_asym_ns(startTime, endTime, c1, c2);
-                System.out.println("  non-stratigraphic range branch("+startTime + ", " + endTime + ")");
-                System.out.println("  logP="+logP);
+                //System.out.println("  non-stratigraphic range branch("+startTime + ", " + endTime + ")");
+                //System.out.println("  logP="+logP);
 
 
             } else {
@@ -186,15 +186,16 @@ public class SRTreeDensity extends TreeDistribution {
                         Node leftDescendant = getLeftDescendantLeaf(node.getParent());
                         if (leftDescendant.getHeight() + sRanges.getValue(leftDescendant.getNr())< node.getHeight()) {
                             // We are ancestral to a distinct species: take the unobserved speciation event into account
-
-                            logP += Math.log(lambda.getValue())
-                                    + log_p(unobsSpecTimes.getArrayValue(leftDescendant.getNr()), c1, c2);
                         }
                     }
                 }
             } else {
                 logP += Math.log(lambda.getValue());
             }
+        }
+
+        for (int i = 0; i < unobsSpecTimes.getDimension(); i++) {
+            logP += Math.log(lambda.getValue()) + log_p(unobsSpecTimes.getArrayValue(i), c1, c2);
         }
 
         logP -= log_oneMinusP0Hat(x0.getValue(),c1,c2);
