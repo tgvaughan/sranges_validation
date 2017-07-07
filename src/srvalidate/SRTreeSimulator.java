@@ -143,9 +143,10 @@ public class SRTreeSimulator {
                 youngestFossil.setMetaData("youngestFossil",(Double)srange.getValue(1));
                 Node parent = node.getParent();
                 if (parent != null) {
-                    parent.removeChild(node);
-                    parent.addChild(youngestFossil);
+
+                    parent.setChild(isLeft(node) ? 0 : 1,youngestFossil);
                     youngestFossil.addChild(node);
+
                 } else if (node == start) {
                     youngestFossil.addChild(node);
                     start = youngestFossil;
@@ -339,7 +340,7 @@ public class SRTreeSimulator {
      * @param node the node to test.
      * @return true if the node is the left child or the root. Returns false if the node is null.
      */
-    private boolean isLeft(Node node) {
+    private static boolean isLeft(Node node) {
         if (node == null) return false;
         if (node.getParent() == null) return true;
         return node.getParent().getChild(0) == node;
@@ -443,19 +444,33 @@ public class SRTreeSimulator {
             n = myTree.getAllLeafNodes().size();
         }
 
-        // clear meta data strings and remove speciation node ids
-        clearMetaDataStringsRemoveSpeciationNodeIds(myTree);
+        // clear meta data strings, remove speciation node ids and add fake nodes
+        cleanup(myTree);
 
         writeDensityMapperXML("myxml.xml", lambda, mu, psi, x0, rho, myTree, stratigraphicIntervals, unobservedSpeciationAges);
     }
 
-    private static void clearMetaDataStringsRemoveSpeciationNodeIds(Node node) {
+    private static void cleanup(Node node) {
         for (Node child : node.getChildren()) {
-            clearMetaDataStringsRemoveSpeciationNodeIds(child);
+            cleanup(child);
         }
         node.metaDataString = null;
-        // if this is a speciation node then remove the id.
-        if (node.getChildCount() == 2) {
+        // if this is sampled ancestor add a fake node
+        if (node.getChildCount() == 1) {
+            Node parent = node.getParent();
+            Node child = node.getChild(0);
+
+            Node fake = new Node();
+            fake.setHeight(node.getHeight());
+
+            node.removeChild(child);
+
+            if (parent != null) {
+                parent.setChild(isLeft(node) ? 0 : 1,fake);
+            }
+            fake.addChild(child);
+            fake.addChild(node);
+        } else if (node.getChildCount() == 2) {
             node.setID(null);
         }
     }
