@@ -27,15 +27,23 @@ import java.util.*;
 public class SRTreeSimulator {
 
     /**
+     * Simulate a sample phylogeny under the stratigraphic range fossilized birth-death process with budding speciation.
      *
      * @param lambda speciation rate
      * @param mu extinction rate
      * @param psi fossil sampling rate
      * @param x0 time of the origin
      * @param rho probability of sampling an extant species at the present
+     * @param unobservedSpeciationAges a list to be populated of the ages of speciation events on lineages within
+     *                                  the sampled phylogeny but that are "unobserved speciation events" because only
+     *                                  one of the two children lineages in the full phylogeny was subsequently sampled.
+     *                                  The ages are in the same units as the node ages (i.e. time before present).
+     * @param stratigraphicIntervals a list of the size of the stratigraphic intervals, indexed by node number in the
+     *                               returned sample phylogeny.
      * @return a Node representing the root of the sample phylogeny after extinct lineages have been pruned away.
      */
-    public Node simulate(double lambda, double mu, double psi, double x0, double rho) {
+    public Node simulate(double lambda, double mu, double psi, double x0, double rho,
+                         List<Double> unobservedSpeciationAges, List<Double> stratigraphicIntervals) {
 
 
         Map<Node, RealParameter> srangeMap = new HashMap<>();
@@ -110,7 +118,6 @@ public class SRTreeSimulator {
         // traverse the whole tree, removing subtrees that have no stratigraphic intervals in them
         int nodesRemoved = removeUnsampled(start, srangeMap);
 
-
         //set leaves to the height of the youngest fossil in their stratigraphic range
         // this is necessary because an internal node with two extinct lineages for children may become a leaf
         // after trimming extinct lineages that needs its age needs to be increased to the youngest fossil of the
@@ -118,7 +125,6 @@ public class SRTreeSimulator {
         for (Node leaf : start.getAllLeafNodes()) {
             leaf.setHeight(srangeMap.get(leaf).getValue(1));
         }
-
 
         List<Node> toBeRemovedFromSranges = new ArrayList<>();
         Set<Node> keys = new HashSet<>();
@@ -133,8 +139,8 @@ public class SRTreeSimulator {
                 // introduce new node for youngest fossil
                 Node youngestFossil = createNode(taxa);
                 youngestFossil.setHeight(srange.getValue(1));
-                youngestFossil.setMetaData("oldestFossil",srange.getValue(0));
-                youngestFossil.setMetaData("youngestFossil",srange.getValue(1));
+                youngestFossil.setMetaData("oldestFossil",(Double)srange.getValue(0));
+                youngestFossil.setMetaData("youngestFossil",(Double)srange.getValue(1));
                 Node parent = node.getParent();
                 if (parent != null) {
                     parent.removeChild(node);
@@ -150,8 +156,8 @@ public class SRTreeSimulator {
                 srangeMap.put(youngestFossil, srange);
 
             } else {
-                node.setMetaData("oldestFossil", srange.getValue(0));
-                node.setMetaData("youngestFossil", srange.getValue(1));
+                node.setMetaData("oldestFossil", (Double)srange.getValue(0));
+                node.setMetaData("youngestFossil", (Double)srange.getValue(1));
             }
         }
 
@@ -162,9 +168,8 @@ public class SRTreeSimulator {
             srangeMap.remove(node);
         }
 
-        List<Double> speciationTimes = new ArrayList<>();
-        removeUnobservedSpeciationNodes(start, speciationTimes);
-        System.out.println("unobserved speciation times:"+speciationTimes);
+        // remove the unobserved speciation nodes in the sample tree and store their ages in the provided list.
+        removeUnobservedSpeciationNodes(start, unobservedSpeciationAges);
 
         processMetaData(start);
 
@@ -177,7 +182,7 @@ public class SRTreeSimulator {
                 node.setNr(i);
                 node.setID(i+"");
                 RealParameter srange = srangeMap.get(node);
-                System.out.print(" "+(srange.getValue(0)-srange.getValue(1)));
+                stratigraphicIntervals.add(srange.getValue(0) - srange.getValue(1));
                 i += 1;
             } else {
                 node.setNr(j);
@@ -193,17 +198,17 @@ public class SRTreeSimulator {
      * This method recursively removes all "unobserved speciation nodes" in a post-order traversal.
      *
      * @param node the node to consider for removal, after having recursively considered its children for removal.
-     * @param times a list of node times to accumulate, one for each node removed.
+     * @param ages a list of node heights to accumulate, one for each unobserved speciation node removed.
      */
-    private void removeUnobservedSpeciationNodes(Node node, List<Double> times) {
+    private void removeUnobservedSpeciationNodes(Node node, List<Double> ages) {
         List<Node> children = new ArrayList<>();
         children.addAll(node.getChildren());
         for (Node child : children) {
-            removeUnobservedSpeciationNodes(child,times);
+            removeUnobservedSpeciationNodes(child,ages);
         }
         if (isUnobservedSpeciationNode(node)) {
             // remove it and store times
-            times.add(node.getHeight());
+            ages.add(node.getHeight());
 
             Node parent = node.getParent();
             Node child = node.getChild(0);
@@ -219,7 +224,17 @@ public class SRTreeSimulator {
      * @return true if the node is an unobserved speciation node.
      */
     private boolean isUnobservedSpeciationNode(Node node) {
-        return node.getParent() != null && node.getChildCount() == 1 && (node.getMetaData("youngestFossil") == null || (Double)node.getMetaData("youngestFossil") < node.getHeight());
+        return node.getParent() != null && node.getChildCount() == 1 &&
+                (getDoubleMetaData(node, "youngestFossil") == null || getDoubleMetaData(node, "youngestFossil") < node.getHeight());
+    }
+
+    private Double getDoubleMetaData(Node node, String key) {
+
+        Object o = node.getMetaData(key);
+        if (o instanceof Integer && (Integer)o == 0) {
+            return null;
+        }
+        return (Double)o;
     }
 
     /**
@@ -406,7 +421,6 @@ public class SRTreeSimulator {
         }
     }
 
-
     public static void main(String[] args) throws IOException {
 
         SRTreeSimulator simulator = new SRTreeSimulator();
@@ -417,35 +431,44 @@ public class SRTreeSimulator {
         double x0 = 8;
         double rho = 0.5;
 
-//        String fileName = "SRTreeSimulator_l"+lambda+"_mu" + mu + "_psi" + psi + "_T" + x0 + "_p" + rho + ".txt";
+        int n = 0;
 
-        //       File outFile = new File(fileName);
-//        PrintWriter writer = new PrintWriter(new FileWriter(outFile));
+        List<Double> unobservedSpeciationAges = new ArrayList<>();
+        List<Double> stratigraphicIntervals = new ArrayList<>();
+        Node myTree = null;
+        while (n < 10) {
+            unobservedSpeciationAges.clear();
+            stratigraphicIntervals.clear();
+            myTree = simulator.simulate(lambda, mu, psi, x0, rho, unobservedSpeciationAges, stratigraphicIntervals);
+            n = myTree.getAllLeafNodes().size();
+        }
 
-//        writer.println("rep\tnumLeaves");
-        ////       int count = 0;
-        ////       int reps = 10;
-        ////       int minSize = 10;
+        // clear meta data strings and remove speciation node ids
+        clearMetaDataStringsRemoveSpeciationNodeIds(myTree);
 
-        ////      while (count < reps) {
-        Node myTree = simulator.simulate(lambda, mu, psi, x0, rho);
-
-        String treeInNewick = myTree.toNewick();
-        System.out.println(treeInNewick);
-
-        ////          if (myTree.getAllLeafNodes().size() > minSize) {
-        ////              String xmlFileName = "SRTreeDensity_l"+lambda+"_mu" + mu + "_psi" + psi + "_T" + x0 + "_p" + rho + "_" + count + ".xml";
-
-        ////              writeSRTreeDensityXML(xmlFileName, lambda, mu, psi, x0, rho, myTree);
-        ////              count += 1;
-        ////          }
-
-        ////}
-//        writer.flush();
-//        writer.close();
+        writeDensityMapperXML("myxml.xml", lambda, mu, psi, x0, rho, myTree, stratigraphicIntervals, unobservedSpeciationAges);
     }
 
-    private static void writeSRTreeDensityXML(String xmlFileName, double lambda, double mu, double psi, double x0, double rho, Node myTree) throws IOException {
+    private static void clearMetaDataStringsRemoveSpeciationNodeIds(Node node) {
+        for (Node child : node.getChildren()) {
+            clearMetaDataStringsRemoveSpeciationNodeIds(child);
+        }
+        node.metaDataString = null;
+        // if this is a speciation node then remove the id.
+        if (node.getChildCount() == 2) {
+            node.setID(null);
+        }
+    }
+
+    private static void writeDensityMapperXML(String xmlFileName,
+                                              double lambda,
+                                              double mu,
+                                              double psi,
+                                              double x0,
+                                              double rho,
+                                              Node myTree,
+                                              List<Double> stratigraphicIntervals,
+                                              List<Double> unobservedSpeciationAges) throws IOException {
 
         File outFile = new File(xmlFileName);
         PrintWriter writer = new PrintWriter(new FileWriter(outFile));
@@ -459,16 +482,51 @@ public class SRTreeSimulator {
                 "        :srvalidate\">\n" +
                 "    <run spec=\"DensityMapper\">\n" +
                 "\n" +
-                "        <realParam spec=\"RealParameter\" id=\"x0\" value=\"0.5\" lower=\"0.1\" upper=\"8.0\"/>\n" +
+                "        <realParam spec=\"RealParameter\" id=\"psi\" value=\"" + psi +
+                "\" lower=\"0.1\" upper=\"3.0\"/>\n" +
                 "        <steps spec=\"IntegerParameter\" value=\"80\"/>\n" +
                 "\n" +
                 "        <distribution spec=\"SRTreeDensity\" id=\"density\">\n");
 
         writer.write("            <lambda spec=\"RealParameter\" value=\"" + lambda + "\"/>\n");
+        writer.write("            <mu spec=\"RealParameter\" value=\"" + mu + "\"/>\n");
+        writer.write("            <psi idref=\"psi\"/>");
+        writer.write("            <x0 spec=\"RealParameter\" value=\"" + x0 + "\"/>\n");
+        writer.write("            <rho spec=\"RealParameter\" value=\"" + rho + "\"/>\n");
 
-        // TODO the rest :)
+        writer.write("            <tree spec=\"TreeParser\" adjustTipHeights=\"false\" newick=\"" + myTree.toNewick()+
+                "\" offset=\"0\"/>\n");
+        writer.write("            <sranges spec=\"RealParameter\" dimension=\"" + stratigraphicIntervals.size() +
+                "\" value=\"" + spaceDelimited(stratigraphicIntervals) + "\"/>\n");
+
+        writer.write("            <unobsSpecTimes spec=\"RealParameter\" dimension=\"" + unobservedSpeciationAges.size()
+                + "\" value=\"" + spaceDelimited(unobservedSpeciationAges) + "\"/>\n");
+
+        writer.write("        </distribution>\n" +
+                "\n" +
+                "        <logger fileName=\"$(filebase).log\" logEvery=\"1\">\n" +
+                "            <log idref=\"psi\"/>\n" +
+                "            <log idref=\"density\"/>\n" +
+                "        </logger>\n" +
+                "\n" +
+                "        <logger id=\"screenlog\" logEvery=\"1\">\n" +
+                "            <log idref=\"psi\"/>\n" +
+                "            <log idref=\"density\"/>\n" +
+                "        </logger>\n" +
+                "    </run>\n" +
+                "</beast>\n");
 
         writer.flush();
         writer.close();
+    }
+
+    private static String spaceDelimited(List<Double> doubleList) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(doubleList.get(0));
+        for (int i = 1; i < doubleList.size(); i++) {
+            builder.append(" ");
+            builder.append(doubleList.get(i));
+        }
+        return builder.toString();
     }
 }
