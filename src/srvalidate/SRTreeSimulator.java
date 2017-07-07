@@ -11,7 +11,7 @@ import java.io.PrintWriter;
 import java.util.*;
 
 /**
- * A class the simulates trees from the stratigraphic range fossilized birth-death process.
+ * A class that simulates trees from the stratigraphic range fossilized birth-death process.
  *
  * Mathematical model details can be found:
  *
