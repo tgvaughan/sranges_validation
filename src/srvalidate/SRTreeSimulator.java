@@ -497,15 +497,18 @@ public class SRTreeSimulator {
                 "        :srvalidate\">\n" +
                 "    <run spec=\"DensityMapper\">\n" +
                 "\n" +
+                "        <realParam spec=\"RealParameter\" id=\"lambda\" value=\"" + lambda +
+                "\" lower=\"0.1\" upper=\"3.0\"/>\n" +
                 "        <realParam spec=\"RealParameter\" id=\"psi\" value=\"" + psi +
                 "\" lower=\"0.1\" upper=\"3.0\"/>\n" +
+                "        <steps spec=\"IntegerParameter\" value=\"80\"/>\n" +
                 "        <steps spec=\"IntegerParameter\" value=\"80\"/>\n" +
                 "\n" +
                 "        <distribution spec=\"SRTreeDensity\" id=\"density\">\n");
 
-        writer.write("            <lambda spec=\"RealParameter\" value=\"" + lambda + "\"/>\n");
+        writer.write("            <lambda idref=\"lambda\"/>\n");
         writer.write("            <mu spec=\"RealParameter\" value=\"" + mu + "\"/>\n");
-        writer.write("            <psi idref=\"psi\"/>");
+        writer.write("            <psi idref=\"psi\"/>\n");
         writer.write("            <x0 spec=\"RealParameter\" value=\"" + x0 + "\"/>\n");
         writer.write("            <rho spec=\"RealParameter\" value=\"" + rho + "\"/>\n");
 
