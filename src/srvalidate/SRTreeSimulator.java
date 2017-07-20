@@ -82,7 +82,7 @@ public class SRTreeSimulator {
 
             if (U < totalBirthRate/totalPropensity) {
                 // do birth
-                doBirth(activeLineages, T, x0, taxa);
+                doBirth(activeLineages, T, x0, taxa, srangeMap);
 
             } else {
                 U -= totalBirthRate/totalPropensity;
@@ -120,7 +120,7 @@ public class SRTreeSimulator {
 
         //set leaves to the height of the youngest fossil in their stratigraphic range
         // this is necessary because an internal node with two extinct lineages for children may become a leaf
-        // after trimming extinct lineages that needs its age needs to be increased to the youngest fossil of the
+        // after trimming extinct lineages. Its age needs to be increased to the youngest fossil of the
         // stratigraphic range associated with it.
         for (Node leaf : start.getAllLeafNodes()) {
             leaf.setHeight(srangeMap.get(leaf).getValue(1));
@@ -139,8 +139,8 @@ public class SRTreeSimulator {
                 // introduce new node for youngest fossil
                 Node youngestFossil = createNode(taxa);
                 youngestFossil.setHeight(srange.getValue(1));
-                youngestFossil.setMetaData("oldestFossil",(Double)srange.getValue(0));
-                youngestFossil.setMetaData("youngestFossil",(Double)srange.getValue(1));
+                youngestFossil.setMetaData("oldestFossil",srange.getValue(0));
+                youngestFossil.setMetaData("youngestFossil",srange.getValue(1));
                 Node parent = node.getParent();
                 if (parent != null) {
 
@@ -157,8 +157,8 @@ public class SRTreeSimulator {
                 srangeMap.put(youngestFossil, srange);
 
             } else {
-                node.setMetaData("oldestFossil", (Double)srange.getValue(0));
-                node.setMetaData("youngestFossil", (Double)srange.getValue(1));
+                node.setMetaData("oldestFossil", srange.getValue(0));
+                node.setMetaData("youngestFossil", srange.getValue(1));
             }
         }
 
@@ -302,7 +302,7 @@ public class SRTreeSimulator {
      * @param x0 the age of the origin before the present.
      * @param taxa a set of taxa that already exist.
      */
-    private void doBirth(List<Node> nodes, double time, double x0, Set<String> taxa) {
+    private void doBirth(List<Node> nodes, double time, double x0, Set<String> taxa, Map<Node,RealParameter> srangeMap) {
 
         Node parent = nodes.get(Randomizer.nextInt(nodes.size()));
         parent.setHeight(x0 - time);
@@ -320,6 +320,12 @@ public class SRTreeSimulator {
 
         nodes.add(leftChild);
         nodes.add(rightChild);
+
+        // propagate knowledge of srange to left child.
+        RealParameter srange = srangeMap.get(parent);
+        if (srange != null) {
+            srangeMap.put(leftChild, srange);
+        }
     }
 
     /**
@@ -348,7 +354,7 @@ public class SRTreeSimulator {
 
     /**
      * Perform a fossil sampling event. This samples the given lineage by creating a new child node and
-     * associating with a new or existing stratigraphic range depending on whether the parent already represents
+     * associating it with a new or existing stratigraphic range depending on whether the parent already represents
      * a stratigraphic range branch.
      * @param nodeToSample the lineage to create a fossil sample from.
      * @param time the current simulation time (since the time of origin).
@@ -358,23 +364,6 @@ public class SRTreeSimulator {
     private void doSample(Node nodeToSample, double time, double x0, Map<Node,RealParameter> srangeMap) {
 
         RealParameter srange = srangeMap.get(nodeToSample);
-        if (srange == null && isLeft(nodeToSample)) {
-            Node parent = nodeToSample.getParent();
-            while (parent != null) {
-                srange = srangeMap.get(parent);
-                if (srange != null) break;
-                if (isLeft(parent)) {
-                    parent = parent.getParent();
-                } else parent = null;
-            }
-            if (srange != null) {
-                Node node = parent;
-                do {
-                    node = node.getChild(0);
-                    srangeMap.put(node, srange);
-                } while (node != nodeToSample);
-            }
-        }
 
         if (srange == null) {
             RealParameter newsrange = new RealParameter(new Double[2]);
