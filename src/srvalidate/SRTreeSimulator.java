@@ -2,6 +2,7 @@ package srvalidate;
 
 import beast.core.parameter.RealParameter;
 import beast.evolution.tree.Node;
+import beast.evolution.tree.Tree;
 import beast.util.Randomizer;
 
 import java.io.File;
@@ -25,6 +26,8 @@ import java.util.*;
  * @author Laura Garcia
  */
 public class SRTreeSimulator {
+
+
 
     /**
      * Simulate a sample phylogeny under the stratigraphic range fossilized birth-death process with budding speciation.
@@ -191,6 +194,8 @@ public class SRTreeSimulator {
                 j += 1;
             }
         }
+
+        cleanup(start);
 
         return start;
     }
@@ -434,9 +439,13 @@ public class SRTreeSimulator {
         }
 
         // clear meta data strings, remove speciation node ids and add fake nodes
-        cleanup(myTree);
 
         writeDensityMapperXML("myxml.xml", lambda, mu, psi, x0, rho, myTree, stratigraphicIntervals, unobservedSpeciationAges);
+
+        // then run myxml.xml in BeastMain and plot in R:
+        // library(ggplot2)
+        // val <- read.table("~/Git/sranges_validation/examples/myxml.log", sep="\t", header=T)
+        // ggplot(val, aes(lambda, psi)) + geom_raster(aes(fill = exp(density+200)))
     }
 
     private static void cleanup(Node node) {
@@ -501,7 +510,7 @@ public class SRTreeSimulator {
         writer.write("            <x0 spec=\"RealParameter\" value=\"" + x0 + "\"/>\n");
         writer.write("            <rho spec=\"RealParameter\" value=\"" + rho + "\"/>\n");
 
-        writer.write("            <tree spec=\"TreeParser\" adjustTipHeights=\"false\" newick=\"" + myTree.toNewick()+
+        writer.write("            <tree spec=\"TreeParser\" adjustTipHeights=\"false\" IsLabelledNewick=\"true\" newick=\"" + myTree.toNewick()+
                 "\" offset=\"0\"/>\n");
         writer.write("            <sranges spec=\"RealParameter\" dimension=\"" + stratigraphicIntervals.size() +
                 "\" value=\"" + spaceDelimited(stratigraphicIntervals) + "\"/>\n");
@@ -513,11 +522,13 @@ public class SRTreeSimulator {
                 "\n" +
                 "        <logger fileName=\"$(filebase).log\" logEvery=\"1\">\n" +
                 "            <log idref=\"psi\"/>\n" +
+                "            <log idref=\"lambda\"/>\n" +
                 "            <log idref=\"density\"/>\n" +
                 "        </logger>\n" +
                 "\n" +
                 "        <logger id=\"screenlog\" logEvery=\"1\">\n" +
                 "            <log idref=\"psi\"/>\n" +
+                "            <log idref=\"lambda\"/>\n" +
                 "            <log idref=\"density\"/>\n" +
                 "        </logger>\n" +
                 "    </run>\n" +
