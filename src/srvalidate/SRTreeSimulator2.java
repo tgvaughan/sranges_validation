@@ -1,6 +1,5 @@
 package srvalidate;
 
-import beast.core.parameter.RealParameter;
 import beast.evolution.tree.Node;
 import beast.util.Randomizer;
 
@@ -24,7 +23,6 @@ import java.util.*;
  * @author Alexei Drummond
  */
 public class SRTreeSimulator2 {
-
 
     /**
      * Simulate a sample phylogeny under the stratigraphic range fossilized birth-death process with budding speciation.
@@ -56,6 +54,9 @@ public class SRTreeSimulator2 {
         List<Node> activeLineages = new ArrayList<>();
 
         activeLineages.add(start);
+
+        int psiSamples = 0;
+        int rhoSamples = 0;
 
         while (T < x0) {
 
@@ -92,24 +93,32 @@ public class SRTreeSimulator2 {
                 } else {
                     // do sample
                     Node sampledNode = activeLineages.get(Randomizer.nextInt(activeLineages.size()));
-                    doSample(sampledNode, T, x0, taxa);
+                    doSample(sampledNode, T, x0, taxa, activeLineages);
+                    psiSamples += 1;
                 }
             }
         }
 
         for (Node activeLineage : activeLineages) {
             if (Randomizer.nextDouble() < rho) {
-                doSample(activeLineage, x0, x0, taxa);
+                doSample(activeLineage, x0, x0, taxa, null);
+                rhoSamples += 1;
             }
         }
 
-        // At this point in the process we have produced a full tree, containing both sampled and unsampled lineages.
+        System.out.println("psi samples = " + psiSamples);
+        System.out.println("rho samples = " + rhoSamples);
 
-        // traverse the whole tree, removing subtrees that have no stratigraphic intervals in them
-        int nodesRemoved = removeUnsampled(start);
+        // At this point in the process we have produced a full tree, containing both sampled and unsampled lineages.
 
         List<Node> youngestSampledNodes = new ArrayList<>();
         getAllYoungestSampledNodes(start, youngestSampledNodes);
+        System.out.println("stratigraphic intervals = " + youngestSampledNodes.size());
+        System.out.println();
+
+        //for (Node node : youngestSampledNodes) {
+        //    if (node.getParent() == null) System.out.println("sample node " + node + " has no parent");
+        //}
 
         int i = 0;
         for (Node node : youngestSampledNodes) {
@@ -121,10 +130,14 @@ public class SRTreeSimulator2 {
             i += 1;
         }
 
-        // remove the unobserved speciation nodes in the sample tree and store their ages in the provided list.
-        removeUnobservedSpeciationNodes(start, unobservedSpeciationAges);
+        // traverse the whole tree, removing subtrees that have no stratigraphic intervals in them
+        //int nodesRemoved = removeUnsampled(start);
 
-        cleanup(start);
+
+        // remove the unobserved speciation nodes in the sample tree and store their ages in the provided list.
+        //removeUnobservedSpeciationNodes(start, unobservedSpeciationAges);
+
+        //cleanup(start);
 
         return start;
     }
@@ -149,13 +162,34 @@ public class SRTreeSimulator2 {
     private double getSRangeEnd(Node node) {
         double o = node.getHeight();
         Node n = node;
-        while (isLeft(n) && n.getParent() != null) {
+        while (isParentSameSpecies(n) && n.getParent() != null) {
             n = n.getParent();
             if (isSampled(n)) {
                 o = n.getHeight();
+            //    Node newn = n.getChild(0);
+            //    removeSampledNode(n);
+            //    n = newn;
             }
         }
         return o;
+    }
+
+    /**
+     * Extracts the given sampled node from the tree and links replaces itself with its child.
+     * @param n
+     */
+    private void removeSampledNode(Node n) {
+        if (!isSampled(n)) throw new RuntimeException();
+        Node parent = n.getParent();
+        Node child = n.getChild(0);
+        n.removeChild(child);
+
+        if (parent == null) {
+            System.out.println(n);
+            throw new RuntimeException("Parent of sampled node is null!");
+        }
+        parent.setChild(parent.getChild(0) == n ? 0 : 1, child);
+        n.setParent(null);
     }
 
     /**
@@ -190,17 +224,8 @@ public class SRTreeSimulator2 {
      * @return true if the node is an unobserved speciation node.
      */
     private boolean isUnobservedSpeciationNode(Node node) {
-        boolean isUnobserved1 = (node.getParent() != null && node.getChildCount() == 1 && !isSampled(node));
-        boolean isUnobserved2 = node.getMetaData("childRemoved") instanceof String &&
-                (node.getMetaData("childRemoved").equals("left") || node.getMetaData("childRemoved").equals("right"));
-//        if (isUnobserved1 != isUnobserved2) {
-//            System.out.println("node.getParent()="+node.getParent());
-//            System.out.println("node.getChildCount()=" + node.getChildCount());
-//            System.out.println("isSampled(node)="+isSampled(node));
-//            System.out.println("node.childRemoved="+node.getMetaData("childRemoved"));
-//            throw new RuntimeException("This shouldn't happen!");
-//        }
-        return isUnobserved2;
+        //boolean isUnobserved1 = (node.getParent() != null && node.getChildCount() == 1 && !isSampled(node));
+        return node.getMetaData("childSameSpecies") instanceof Boolean;
     }
 
     /**
@@ -223,7 +248,13 @@ public class SRTreeSimulator2 {
 
             if (node.getParent() != null) {
                 Node parent = node.getParent();
-                parent.setMetaData("childRemoved", isLeft(node) ? "left" : "right");
+
+                // if we are removing the right node then the remaining child is the same species
+                if (parent.getChildCount() == 2) {
+                    parent.setMetaData("childSameSpecies", parent.getChild(1) == node);
+                } else {
+                    parent.setMetaData("childSameSpecies", null);
+                }
                 parent.removeChild(node);
                 removed += 1;
             }
@@ -232,7 +263,7 @@ public class SRTreeSimulator2 {
     }
 
     private boolean isSampled(Node node) {
-        Object isSampled = node.getMetaData("sampled");
+        Object isSampled = node.getMetaData("sample");
         if (isSampled instanceof Integer && (Integer)isSampled == 0) return false;
         return (boolean)isSampled;
     }
@@ -292,24 +323,25 @@ public class SRTreeSimulator2 {
     }
 
     /**
-     * Returns true if the node is the logically left child or the root.
+     * Returns true if the parent lineage is the same species as this lineage.
      * For children of unobserved speciation nodes, checks if parent.childRemoved == "right";
-     * Returns false if the node is null.
+     * If the node is null, returns false
+     * If the parent is null, returns true.
      *
      * @param node the node to test.
-     * @return true if the node is the left child or the root. Returns false if the node is null.
+     * @return true if the parent is the same species as this given node. Returns false if the node is null.
      */
-    private static boolean isLeft(Node node) {
+    private static boolean isParentSameSpecies(Node node) {
         if (node == null) return false;
-        if (node.getParent() == null) return true;
 
         Node parent = node.getParent();
-        Object childRemoved = parent.getMetaData("childRemoved");
-        if (childRemoved != null) {
-            return childRemoved.equals("right");
-        }
 
-        return parent.getChild(0) == node;
+        if (parent == null) return true;
+
+        Object childSameSpecies = parent.getMetaData("childSameSpecies");
+        if (childSameSpecies instanceof Boolean) {
+            return (boolean)childSameSpecies;
+        } else return parent.getChild(0) == node;
     }
 
     /**
@@ -321,7 +353,7 @@ public class SRTreeSimulator2 {
      * @param time         the current simulation time (since the time of origin).
      * @param x0           the age of the origin before the present.
      */
-    private void doSample(Node nodeToSample, double time, double x0, Set<String> taxa) {
+    private void doSample(Node nodeToSample, double time, double x0, Set<String> taxa, List<Node> nodes) {
 
         Node sampleNode = createNode(taxa);
 
@@ -329,6 +361,12 @@ public class SRTreeSimulator2 {
         sampleNode.setMetaData("sample", true);
 
         nodeToSample.addChild(sampleNode);
+        nodeToSample.setHeight(x0 - time);
+
+        if (nodes != null) {
+            nodes.add(sampleNode);
+            nodes.remove(nodeToSample);
+        }
     }
 
     public static void main(String[] args) throws IOException {
@@ -353,9 +391,11 @@ public class SRTreeSimulator2 {
             n = myTree.getAllLeafNodes().size();
         }
 
+        System.out.println(myTree.toNewick());
+
         // clear meta data strings, remove speciation node ids and add fake nodes
 
-        writeDensityMapperXML("myxml.xml", lambda, mu, psi, x0, rho, myTree, stratigraphicIntervals, unobservedSpeciationAges);
+        //writeDensityMapperXML("myxml.xml", lambda, mu, psi, x0, rho, myTree, stratigraphicIntervals, unobservedSpeciationAges);
 
         // then run myxml.xml in BeastMain and plot in R:
         // library(ggplot2)
@@ -379,7 +419,7 @@ public class SRTreeSimulator2 {
             node.removeChild(child);
 
             if (parent != null) {
-                parent.setChild(isLeft(node) ? 0 : 1, fake);
+                parent.setChild(parent.getChild(0) == node ? 0 : 1, fake);
             }
             fake.addChild(child);
             fake.addChild(node);
