@@ -89,10 +89,10 @@ public class FBDTreeSimulator {
 
         for (Node activeLineage : activeLineages) {
             if (Randomizer.nextDouble() < rho) {
-                doRho(activeLineage);
+                doRho(activeLineage, true);
                 rhoSamples += 1;
             } else {
-                doUnsample(activeLineage);
+                doRho(activeLineage, false);
             }
         }
 
@@ -101,14 +101,9 @@ public class FBDTreeSimulator {
         return start;
     }
 
-    private void doUnsample(Node node) {
+    private void doRho(Node node, boolean sample) {
         node.setHeight(0);
-        node.setMetaData("rho", false);
-    }
-
-    private void doRho(Node node) {
-        node.setHeight(0);
-        node.setMetaData("rho", true);
+        node.setMetaData("rho", sample);
     }
 
     /**
@@ -196,7 +191,7 @@ public class FBDTreeSimulator {
      * be implemented in the core.
      * @param node the node to process the metadata of.
      */
-    private void processMetaData(Node node) {
+    public static void processMetaData(Node node) {
         for (Node child : node.getChildren()) {
             processMetaData(child);
         }
