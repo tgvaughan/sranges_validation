@@ -14,6 +14,8 @@ import java.util.List;
  */
 public class SampleTree {
 
+    static final String S_RANGE = "stratigraphicRange";
+
     public SampleTree() {}
 
     /**
@@ -23,12 +25,21 @@ public class SampleTree {
      */
     public Node sampleTree(Node fullTree) {
 
-        markParents("reaction", "psi", fullTree);
-        markParents("rho", true, fullTree);
+        int m1 = markParents("reaction", "psi", fullTree);
+        int m2 = markParents("rho", true, fullTree);
 
         markStratigraphicIntervals(fullTree);
 
+//        System.out.println("nodes in full tree = " + fullTree.getAllChildNodes().size());
+//        System.out.println("m1 = " + m1 + "; m2 = " + m2 + "; sum=" + (m1+m2));
+
         removeUnmarkedNodes(fullTree);
+
+//        System.out.println("nodes in tree after removing unmarked nodes = " + fullTree.getAllChildNodes().size());
+//
+//        System.out.println("  nodes matching rho=true: " + matchesNodeTrait(fullTree.getAllChildNodes(), "rho", true));
+//        System.out.println("  nodes matching rho=false: " + matchesNodeTrait(fullTree.getAllChildNodes(), "rho", false));
+//        System.out.println("  nodes matching reaction=psi: " + matchesNodeTrait(fullTree.getAllChildNodes(), "reaction", "psi"));
 
         fullTree = removeOlderPsiNodesAndUnobservedSpeciationNodes(fullTree);
 
@@ -56,7 +67,7 @@ public class SampleTree {
         List<Node> nodes = rootNode.getAllChildNodes();
 
         for (Node node : nodes) {
-            if (isPsiSampleNode(node) && !(node.getMetaData("oldestFossil") instanceof Double) || (isSpeciation(node) && node.getChildCount()==1)) {
+            if (isPsiSampleNode(node) && !(node.getMetaData(S_RANGE) instanceof Double) || (isSpeciation(node) && node.getChildCount()==1)) {
 
                 Node parent = node.getParent();
                 Node child = node.getChild(0);
@@ -86,7 +97,7 @@ public class SampleTree {
                 if (parent.getChild(0) == node) {
                     oldest = collectOldestSampleAge(node.getParent());
                 }
-                node.setMetaData("oldestFossil", Math.max(node.getHeight(),oldest));
+                node.setMetaData(S_RANGE, Math.max(node.getHeight(),oldest)-node.getHeight());
             }
         }
 
@@ -97,7 +108,7 @@ public class SampleTree {
             if (parent != null && parent.getChild(0) == node) {
                 oldest = collectOldestSampleAge(node.getParent());
             }
-            node.setMetaData("oldestFossil", Math.max(node.getHeight(),oldest));
+            node.setMetaData(S_RANGE, Math.max(node.getHeight(),oldest)-node.getHeight());
         }
 
         List<Node> children = new ArrayList<>();
@@ -117,26 +128,39 @@ public class SampleTree {
         return !isSampleNode(n);
     }
 
-    private boolean isSampleNode(Node node) {
+    public static boolean isSampleNode(Node node) {
         Object rhoValue = node.getMetaData("rho");
         return rhoValue instanceof Boolean && (Boolean) rhoValue || isPsiSampleNode(node);
     }
 
-    private boolean isPsiSampleNode(Node node) {
+    public static boolean isPsiSampleNode(Node node) {
         return isReaction(node, "psi");
     }
 
-    private boolean isSpeciation(Node node) {
+    public static boolean isSpeciation(Node node) {
         return isReaction(node, "lambda");
     }
 
-    private boolean isExtinction(Node node) {
+    public static boolean isExtinction(Node node) {
         return isReaction(node, "mu");
     }
 
-    private boolean isReaction(Node node, String reactionString) {
+    public static boolean isReaction(Node node, String reactionString) {
         Object reaction = node.getMetaData("reaction");
         return reaction instanceof String && ((String) reaction).equals(reactionString);
+    }
+
+    public static boolean matchesNodeTrait(Node node, String trait, Object value) {
+        Object val = node.getMetaData(trait);
+        return val == value;
+    }
+
+    public static int matchesNodeTrait(List<Node> nodes, String trait, Object value) {
+        int matches = 0;
+        for (int i = 0; i < nodes.size(); i++) {
+            matches += (matchesNodeTrait(nodes.get(i), trait, value) ? 1 : 0);
+        }
+        return matches;
     }
 
     private boolean isMarked(Node node) {
@@ -216,29 +240,44 @@ public class SampleTree {
             Node parent = node.getParent();
             if (parent != null) {
                 parent.removeChild(node);
+                node.setParent(null);
             }
         }
     }
 
 
-    private void markParents(String key, Object value, Node node) {
+    private int markParents(String key, Object value, Node node) {
+
+        int marks = 0;
 
         for (Node child : node.getChildren()) {
-            markParents(key, value, child);
+            marks += markParents(key, value, child);
         }
 
         if (node.getMetaDataNames().contains(key)) {
             Object val = node.getMetaData(key);
             if (val.equals(value)) {
                 // mark this node
-                node.setMetaData("mark",true);
+                if (markNode(node)) marks += 1;
                 Node n = node.getParent();
                 while (n != null) {
-                    n.setMetaData("mark",true);
+                    if (markNode(n)) marks += 1;
                     n = n.getParent();
                 }
             }
         }
+        return marks;
+    }
+
+    /**
+     * Mark the node if a mark attribute not already present
+     * @param node
+     * @return true if a mark attribute was added by this call, false if mark attribute already present
+     */
+    private boolean markNode(Node node) {
+        if (node.getMetaDataNames().contains("mark")) return false;
+        node.setMetaData("mark",true);
+        return true;
     }
 
     public static void main(String[] args) throws IOException {
